@@ -1,0 +1,77 @@
+name: Django CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 1
+      matrix:
+        python-version: [3.8]  # Python version compatible with Django 4.0.6 and requirements
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run tests
+      run: |
+        python manage.py test
+
+  release:
+    needs: build  # This stage depends on the build job completing successfully
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Log in to Docker Hub
+      run: |
+        echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+    - name: Build Docker image
+      run: |
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/django-app:${{ github.sha }} .
+
+    - name: Push Docker image
+      run: |
+        docker push ${{ secrets.DOCKER_USERNAME }}/django-app:${{ github.sha }}
+
+    - name: Log out from Docker Hub
+      run: |
+        docker logout
+
+  deploy:
+    needs: release  # This stage depends on the release job completing successfully
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Deploy to remote server
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      run: |
+        echo "$SSH_PRIVATE_KEY" > private_key.pem
+        chmod 400 private_key.pem
+        ssh -o StrictHostKeyChecking=no -i private_key.pem proxmox@192.168.0.137 "
+          docker login -u ${DOCKER_USERNAME} -p ${DOCKER_PASSWORD} &&
+          docker pull ${{ secrets.DOCKER_USERNAME }}/django-app:${{ github.sha }} &&
+          docker run -d -p 5000:8000 ${{ secrets.DOCKER_USERNAME }}/django-app:${{ github.sha }}" 
+
+    - name: Clean up private key
+      run: |
+        rm -f private_key.pem
