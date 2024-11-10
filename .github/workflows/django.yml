@@ -23,6 +23,14 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
+    - name: Cache Python dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-python-${{ matrix.python-version }}-dependencies-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-python-${{ matrix.python-version }}-dependencies-
+
     - name: Install Dependencies and Create Virtual Environment
       run: |
         python -m pip install --upgrade pip
@@ -31,7 +39,7 @@ jobs:
         pip install -r requirements.txt
         deactivate
 
-    - name: Upload Virtual Environment as Artifact
+    - name: Upload venv as Artifact (Optional)
       uses: actions/upload-artifact@v3
       with:
         name: venv
@@ -45,7 +53,7 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Download Virtual Environment Artifact
+    - name: Download Virtual Environment Artifact (Optional)
       uses: actions/download-artifact@v3
       with:
         name: venv
